@@ -1,0 +1,21 @@
+# Byte-compiled / cache de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Configuración local del usuario (contiene rutas de disco locales y UUID)
+config.json
+
+# Entornos virtuales y empaquetados
+.venv/
+venv/
+env/
+build/
+dist/
+*.spec
+
+# Archivos del sistema / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

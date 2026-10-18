@@ -1,0 +1,7 @@
+{
+  "friendly_name": "BeamTV",
+  "folders": [],
+  "port": 8200,
+  "auto_start": true,
+  "device_uuid": "00000000-0000-0000-0000-000000000000"
+}
