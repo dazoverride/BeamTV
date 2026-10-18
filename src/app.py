@@ -1,6 +1,6 @@
 """
-Aplicación de escritorio para el Servidor DLNA (Samsung TV).
-Interfaz oscura pulida con icono personalizado, tabla de carpetas y registro en color.
+Aplicación de escritorio para BeamTV — DLNA Media Server.
+Interfaz adaptable a cualquier resolución y escalado DPI de Windows (portátiles y monitores).
 """
 
 import ctypes
@@ -54,9 +54,7 @@ def apply_dark_titlebar(window: tk.Tk):
         if not hwnd:
             hwnd = window.winfo_id()
         value = ctypes.c_int(1)
-        # 20 = DWMWA_USE_IMMERSIVE_DARK_MODE (Windows 11 / Win10 20H1+)
         ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(value), ctypes.sizeof(value))
-        # 19 = respaldo para compilaciones anteriores de Windows 10
         ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 19, ctypes.byref(value), ctypes.sizeof(value))
     except Exception:
         pass
@@ -100,9 +98,23 @@ class DLNADesktopApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("BeamTV — DLNA Media Server")
-        self.root.geometry("740x580")
-        self.root.minsize(660, 500)
         self.root.configure(bg="#141622")
+
+        # Calcular factor de escala proporcional a la pantalla y al DPI real
+        self.scale = self._compute_ui_scale()
+
+        win_w = self.px(820)
+        win_h = self.px(620)
+        min_w = self.px(720)
+        min_h = self.px(520)
+
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+        pos_x = max(20, (screen_w - win_w) // 2)
+        pos_y = max(20, (screen_h - win_h) // 2 - self.px(15))
+
+        self.root.geometry(f"{win_w}x{win_h}+{pos_x}+{pos_y}")
+        self.root.minsize(min_w, min_h)
 
         self._set_window_icon()
         apply_dark_titlebar(self.root)
@@ -129,6 +141,38 @@ class DLNADesktopApp:
         else:
             self.append_log("[INFO] Listo. Pulsa 'Iniciar Servidor' para activar la transmisión.")
 
+    def _compute_ui_scale(self) -> float:
+        """
+        Obtiene un factor de escala armónico entre el DPI de Windows y la altura del monitor,
+        evitando que en portátiles con 125%/150% de escala los textos se desborden.
+        """
+        try:
+            dpi = float(self.root.winfo_fpixels("1i"))
+            dpi_scale = dpi / 96.0
+        except Exception:
+            dpi_scale = 1.0
+
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+
+        max_w_scale = (screen_w * 0.88) / 820.0
+        max_h_scale = (screen_h * 0.84) / 620.0
+        return max(0.95, min(dpi_scale, max_w_scale, max_h_scale))
+
+    def px(self, value: float) -> int:
+        """Convierte unidades lógicas a píxeles físicos escalados."""
+        return max(1, int(round(value * self.scale)))
+
+    def fnt(self, pixel_size: int, weight: str = "", family: str = "Segoe UI") -> tuple:
+        """
+        Usa tamaño negativo en Tkinter (tamaño exacto en píxeles) para que las fuentes
+        escalen exactamente en la misma proporción que los contenedores en cualquier portátil.
+        """
+        scaled_px = -self.px(pixel_size)
+        if weight:
+            return (family, scaled_px, weight)
+        return (family, scaled_px)
+
     def _set_window_icon(self):
         self.header_icon_img = None
         try:
@@ -140,8 +184,9 @@ class DLNADesktopApp:
             if ICON_PNG.exists():
                 full_png = tk.PhotoImage(file=str(ICON_PNG))
                 self.root.iconphoto(True, full_png)
-                # Subsample 128x128 -> 32x32 para el icono interno de la cabecera
-                self.header_icon_img = full_png.subsample(3, 3)
+                # Ajuste del icono de cabecera (128px -> ~42px)
+                factor = max(2, int(round(128 / self.px(40))))
+                self.header_icon_img = full_png.subsample(factor, factor)
         except Exception:
             pass
 
@@ -190,8 +235,8 @@ class DLNADesktopApp:
             foreground="#cdd6f4",
             fieldbackground="#11131e",
             borderwidth=0,
-            rowheight=30,
-            font=("Segoe UI", 9),
+            rowheight=self.px(30),
+            font=self.fnt(13),
         )
         style.configure(
             "DLNA.Treeview.Heading",
@@ -199,8 +244,8 @@ class DLNADesktopApp:
             foreground="#89b4fa",
             relief="flat",
             borderwidth=0,
-            padding=(10, 6),
-            font=("Segoe UI", 9, "bold"),
+            padding=(self.px(10), self.px(6)),
+            font=self.fnt(13, "bold"),
         )
         style.map(
             "DLNA.Treeview",
@@ -221,7 +266,7 @@ class DLNADesktopApp:
             troughcolor="#11131e",
             bordercolor="#11131e",
             arrowcolor="#7f849c",
-            width=12,
+            width=self.px(12),
         )
         style.map(
             "Dark.Vertical.TScrollbar",
@@ -237,43 +282,47 @@ class DLNADesktopApp:
         fg_text = "#e2e8f0"
         fg_muted = "#94a3b8"
 
+        pad_outer = self.px(16)
+        pad_card_x = self.px(16)
+        pad_card_y = self.px(12)
+
         # ================= 1. CABECERA DE ESTADO =================
         top_frame = tk.Frame(
             self.root,
             bg=bg_card,
-            padx=18,
-            pady=14,
+            padx=pad_card_x,
+            pady=pad_card_y,
             highlightthickness=1,
             highlightbackground=border_card,
         )
-        top_frame.pack(fill=tk.X, padx=16, pady=(16, 8))
+        top_frame.pack(side=tk.TOP, fill=tk.X, padx=pad_outer, pady=(pad_outer, self.px(6)))
 
-        # Botones a la derecha (se empaquetan primero para garantizar su espacio)
+        # Botones a la derecha
         btn_right = tk.Frame(top_frame, bg=bg_card)
-        btn_right.pack(side=tk.RIGHT, padx=(12, 0))
+        btn_right.pack(side=tk.RIGHT, padx=(self.px(10), 0))
 
         self.toggle_btn = HoverButton(
             btn_right,
             text="▶  Iniciar Servidor",
-            font=("Segoe UI", 10, "bold"),
+            font=self.fnt(13, "bold"),
             bg_normal="#a6e3a1",
             bg_hover="#8bd586",
             fg_normal="#11131e",
-            padx=18,
-            pady=8,
+            padx=self.px(16),
+            pady=self.px(7),
             command=self.toggle_server,
         )
-        self.toggle_btn.pack(side=tk.LEFT, padx=(0, 8))
+        self.toggle_btn.pack(side=tk.LEFT, padx=(0, self.px(8)))
 
         self.announce_btn = HoverButton(
             btn_right,
             text="↻  Refrescar TV",
-            font=("Segoe UI", 9, "bold"),
+            font=self.fnt(13, "bold"),
             bg_normal="#2b3048",
             bg_hover="#39405f",
             fg_normal=fg_text,
-            padx=14,
-            pady=8,
+            padx=self.px(14),
+            pady=self.px(7),
             command=self.manual_announce,
         )
         self.announce_btn.pack(side=tk.LEFT)
@@ -281,7 +330,7 @@ class DLNADesktopApp:
         # Icono de aplicación a la izquierda
         if self.header_icon_img:
             icon_lbl = tk.Label(top_frame, image=self.header_icon_img, bg=bg_card)
-            icon_lbl.pack(side=tk.LEFT, padx=(0, 14))
+            icon_lbl.pack(side=tk.LEFT, padx=(0, self.px(12)))
 
         # Bloque de estado central
         status_left = tk.Frame(top_frame, bg=bg_card)
@@ -290,92 +339,55 @@ class DLNADesktopApp:
         status_row = tk.Frame(status_left, bg=bg_card)
         status_row.pack(fill=tk.X, anchor="w")
 
-        # Indicador LED dibujado con Canvas (nítido, sin emojis rotos)
+        led_sz = self.px(18)
         self.led_canvas = tk.Canvas(
             status_row,
-            width=18,
-            height=18,
+            width=led_sz,
+            height=led_sz,
             bg=bg_card,
             highlightthickness=0,
         )
-        self.led_canvas.pack(side=tk.LEFT, pady=(2, 0))
+        self.led_canvas.pack(side=tk.LEFT, pady=(self.px(2), 0))
         self._draw_led(active=False)
 
         self.status_label = tk.Label(
             status_row,
             text="SERVER OFF",
-            font=("Segoe UI", 13, "bold"),
+            font=self.fnt(17, "bold"),
             bg=bg_card,
             fg="#f38ba8",
             anchor="w",
         )
-        self.status_label.pack(side=tk.LEFT, padx=(7, 0))
+        self.status_label.pack(side=tk.LEFT, padx=(self.px(7), 0))
 
         self.ip_label = tk.Label(
             status_left,
             text=self._format_substatus(),
-            font=("Segoe UI", 9),
+            font=self.fnt(12),
             bg=bg_card,
             fg=fg_muted,
             anchor="w",
         )
-        self.ip_label.pack(fill=tk.X, pady=(3, 0))
+        self.ip_label.pack(fill=tk.X, pady=(self.px(2), 0))
 
         # ================= 2. BARRA DE CONFIGURACIÓN =================
         cfg_frame = tk.Frame(
             self.root,
             bg=bg_card,
-            padx=18,
-            pady=10,
+            padx=pad_card_x,
+            pady=self.px(9),
             highlightthickness=1,
             highlightbackground=border_card,
         )
-        cfg_frame.pack(fill=tk.X, padx=16, pady=6)
+        cfg_frame.pack(side=tk.TOP, fill=tk.X, padx=pad_outer, pady=self.px(5))
 
-        tk.Label(
-            cfg_frame,
-            text="Nombre en TV:",
-            font=("Segoe UI", 9, "bold"),
-            bg=bg_card,
-            fg=fg_text,
-        ).pack(side=tk.LEFT)
-
-        self.name_var = tk.StringVar(value=self.config["friendly_name"])
-        entry_wrap = tk.Frame(cfg_frame, bg="#11131e", highlightthickness=1, highlightbackground="#333956")
-        entry_wrap.pack(side=tk.LEFT, padx=(10, 8))
-
-        self.name_entry = tk.Entry(
-            entry_wrap,
-            textvariable=self.name_var,
-            font=("Segoe UI", 10),
-            bg="#11131e",
-            fg="#ffffff",
-            insertbackground="#89b4fa",
-            relief=tk.FLAT,
-            width=22,
-        )
-        self.name_entry.pack(padx=8, pady=4)
-        self.name_entry.bind("<FocusOut>", lambda _e: self.on_name_changed())
-        self.name_entry.bind("<Return>", lambda _e: self.on_name_changed())
-
-        HoverButton(
-            cfg_frame,
-            text="Guardar",
-            font=("Segoe UI", 9),
-            bg_normal="#2b3048",
-            bg_hover="#39405f",
-            fg_normal=fg_text,
-            padx=12,
-            pady=4,
-            command=self.on_name_changed,
-        ).pack(side=tk.LEFT)
-
+        # Casilla a la derecha empaquetada primero para que nunca se corte
         self.auto_start_var = tk.BooleanVar(value=self.config.get("auto_start", True))
         auto_chk = tk.Checkbutton(
             cfg_frame,
             text="Iniciar automáticamente al abrir",
             variable=self.auto_start_var,
-            font=("Segoe UI", 9),
+            font=self.fnt(12),
             bg=bg_card,
             fg=fg_muted,
             selectcolor="#11131e",
@@ -386,24 +398,62 @@ class DLNADesktopApp:
         )
         auto_chk.pack(side=tk.RIGHT)
 
-        # ================= 3. REGISTRO DE ACTIVIDAD (Anclado abajo siempre visible) =================
+        tk.Label(
+            cfg_frame,
+            text="Nombre en TV:",
+            font=self.fnt(13, "bold"),
+            bg=bg_card,
+            fg=fg_text,
+        ).pack(side=tk.LEFT)
+
+        self.name_var = tk.StringVar(value=self.config["friendly_name"])
+        entry_wrap = tk.Frame(cfg_frame, bg="#11131e", highlightthickness=1, highlightbackground="#333956")
+        entry_wrap.pack(side=tk.LEFT, padx=(self.px(10), self.px(8)))
+
+        self.name_entry = tk.Entry(
+            entry_wrap,
+            textvariable=self.name_var,
+            font=self.fnt(13),
+            bg="#11131e",
+            fg="#ffffff",
+            insertbackground="#89b4fa",
+            relief=tk.FLAT,
+            width=20,
+        )
+        self.name_entry.pack(padx=self.px(8), pady=self.px(4))
+        self.name_entry.bind("<FocusOut>", lambda _e: self.on_name_changed())
+        self.name_entry.bind("<Return>", lambda _e: self.on_name_changed())
+
+        HoverButton(
+            cfg_frame,
+            text="Guardar",
+            font=self.fnt(12),
+            bg_normal="#2b3048",
+            bg_hover="#39405f",
+            fg_normal=fg_text,
+            padx=self.px(12),
+            pady=self.px(4),
+            command=self.on_name_changed,
+        ).pack(side=tk.LEFT)
+
+        # ================= 3. REGISTRO DE ACTIVIDAD (Anclado abajo) =================
         log_frame = tk.Frame(
             self.root,
             bg=bg_card,
-            padx=18,
-            pady=10,
+            padx=pad_card_x,
+            pady=self.px(10),
             highlightthickness=1,
             highlightbackground=border_card,
         )
-        log_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=16, pady=(6, 16))
+        log_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=pad_outer, pady=(self.px(5), pad_outer))
 
         log_header = tk.Frame(log_frame, bg=bg_card)
-        log_header.pack(fill=tk.X, pady=(0, 6))
+        log_header.pack(fill=tk.X, pady=(0, self.px(5)))
 
         tk.Label(
             log_header,
             text="Registro de Actividad",
-            font=("Segoe UI", 9, "bold"),
+            font=self.fnt(12, "bold"),
             bg=bg_card,
             fg=fg_muted,
             anchor="w",
@@ -412,23 +462,23 @@ class DLNADesktopApp:
         HoverButton(
             log_header,
             text="Limpiar",
-            font=("Segoe UI", 8),
+            font=self.fnt(11),
             bg_normal="#23273b",
             bg_hover="#333956",
             fg_normal=fg_muted,
-            padx=8,
-            pady=2,
+            padx=self.px(9),
+            pady=self.px(2),
             command=self.clear_logs,
         ).pack(side=tk.RIGHT)
 
         self.log_text = tk.Text(
             log_frame,
-            height=5,
-            font=("Consolas", 9),
+            height=4,
+            font=self.fnt(12, family="Consolas"),
             bg="#0e101a",
             fg="#cdd6f4",
-            padx=10,
-            pady=8,
+            padx=self.px(10),
+            pady=self.px(6),
             relief=tk.FLAT,
             highlightthickness=1,
             highlightbackground="#262b42",
@@ -437,24 +487,32 @@ class DLNADesktopApp:
         )
         self.log_text.pack(fill=tk.X)
 
-        # ================= 4. TABLA DE CARPETAS COMPARTIDAS (Rellena el centro) =================
+        self.log_text.tag_config("time", foreground="#6c7086")
+        self.log_text.tag_config("on", foreground="#a6e3a1")
+        self.log_text.tag_config("tv", foreground="#89dceb")
+        self.log_text.tag_config("play", foreground="#f9e2af")
+        self.log_text.tag_config("dir", foreground="#89b4fa")
+        self.log_text.tag_config("off", foreground="#f38ba8")
+        self.log_text.tag_config("info", foreground="#cdd6f4")
+
+        # ================= 4. TABLA DE CARPETAS COMPARTIDAS (Centro expandible) =================
         folders_frame = tk.Frame(
             self.root,
             bg=bg_card,
-            padx=18,
-            pady=12,
+            padx=pad_card_x,
+            pady=pad_card_y,
             highlightthickness=1,
             highlightbackground=border_card,
         )
-        folders_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=16, pady=6)
+        folders_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=pad_outer, pady=self.px(5))
 
         header_folders = tk.Frame(folders_frame, bg=bg_card)
-        header_folders.pack(fill=tk.X, pady=(0, 10))
+        header_folders.pack(fill=tk.X, pady=(0, self.px(8)))
 
         tk.Label(
             header_folders,
             text="Carpetas Compartidas",
-            font=("Segoe UI", 10, "bold"),
+            font=self.fnt(14, "bold"),
             bg=bg_card,
             fg=fg_text,
         ).pack(side=tk.LEFT)
@@ -465,36 +523,36 @@ class DLNADesktopApp:
         HoverButton(
             btn_bar,
             text="+  Añadir Carpeta",
-            font=("Segoe UI", 9, "bold"),
+            font=self.fnt(12, "bold"),
             bg_normal="#89b4fa",
             bg_hover="#74a8fc",
             fg_normal="#11131e",
-            padx=14,
-            pady=5,
+            padx=self.px(14),
+            pady=self.px(5),
             command=self.add_folder,
-        ).pack(side=tk.LEFT, padx=(0, 6))
+        ).pack(side=tk.LEFT, padx=(0, self.px(6)))
 
         HoverButton(
             btn_bar,
             text="−  Quitar",
-            font=("Segoe UI", 9),
+            font=self.fnt(12),
             bg_normal="#2b3048",
             bg_hover="#f38ba8",
             fg_normal=fg_text,
-            padx=12,
-            pady=5,
+            padx=self.px(12),
+            pady=self.px(5),
             command=self.remove_folder,
-        ).pack(side=tk.LEFT, padx=(0, 6))
+        ).pack(side=tk.LEFT, padx=(0, self.px(6)))
 
         HoverButton(
             btn_bar,
             text="Abrir Carpeta",
-            font=("Segoe UI", 9),
+            font=self.fnt(12),
             bg_normal="#2b3048",
             bg_hover="#39405f",
             fg_normal=fg_text,
-            padx=12,
-            pady=5,
+            padx=self.px(12),
+            pady=self.px(5),
             command=self.open_selected_folder,
         ).pack(side=tk.LEFT)
 
@@ -514,9 +572,9 @@ class DLNADesktopApp:
         self.folders_tree.heading("path", text="Ruta en Disco", anchor="w")
         self.folders_tree.heading("status", text="Estado", anchor="center")
 
-        self.folders_tree.column("name", width=160, minwidth=110, anchor="w", stretch=False)
-        self.folders_tree.column("path", width=390, minwidth=220, anchor="w", stretch=True)
-        self.folders_tree.column("status", width=95, minwidth=80, anchor="center", stretch=False)
+        self.folders_tree.column("name", width=self.px(170), minwidth=self.px(110), anchor="w", stretch=False)
+        self.folders_tree.column("path", width=self.px(420), minwidth=self.px(200), anchor="w", stretch=True)
+        self.folders_tree.column("status", width=self.px(100), minwidth=self.px(80), anchor="center", stretch=False)
 
         scrollbar = ttk.Scrollbar(
             tree_container,
@@ -529,36 +587,27 @@ class DLNADesktopApp:
         self.folders_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # Doble clic para abrir la carpeta en el Explorador de Windows
         self.folders_tree.bind("<Double-1>", lambda _e: self.open_selected_folder())
         self.folders_tree.bind("<Delete>", lambda _e: self.remove_folder())
 
         self._refresh_folders_tree()
 
-        # Etiquetas de colores para el log
-        self.log_text.tag_config("time", foreground="#6c7086")
-        self.log_text.tag_config("on", foreground="#a6e3a1")
-        self.log_text.tag_config("tv", foreground="#89dceb")
-        self.log_text.tag_config("play", foreground="#f9e2af")
-        self.log_text.tag_config("dir", foreground="#89b4fa")
-        self.log_text.tag_config("off", foreground="#f38ba8")
-        self.log_text.tag_config("info", foreground="#cdd6f4")
-
     def _draw_led(self, active: bool):
         self.led_canvas.delete("all")
+        s = self.px(18)
+        pad_outer = max(1, int(round(s * 0.06)))
+        pad_inner = max(3, int(round(s * 0.22)))
         if active:
-            # Halo exterior verde suave + núcleo brillante
-            self.led_canvas.create_oval(1, 1, 17, 17, fill="#244735", outline="")
-            self.led_canvas.create_oval(4, 4, 14, 14, fill="#a6e3a1", outline="")
+            self.led_canvas.create_oval(pad_outer, pad_outer, s - pad_outer, s - pad_outer, fill="#244735", outline="")
+            self.led_canvas.create_oval(pad_inner, pad_inner, s - pad_inner, s - pad_inner, fill="#a6e3a1", outline="")
         else:
-            # Halo exterior rojo suave + núcleo rojo
-            self.led_canvas.create_oval(1, 1, 17, 17, fill="#472430", outline="")
-            self.led_canvas.create_oval(4, 4, 14, 14, fill="#f38ba8", outline="")
+            self.led_canvas.create_oval(pad_outer, pad_outer, s - pad_outer, s - pad_outer, fill="#472430", outline="")
+            self.led_canvas.create_oval(pad_inner, pad_inner, s - pad_inner, s - pad_inner, fill="#f38ba8", outline="")
 
     def _format_substatus(self) -> str:
         ip = self.server.local_ip or get_local_ip()
         count = len(self.config.get("folders", []))
-        return f"IP Local: {ip}   •   Puerto: {self.server.port}   •   Carpetas: {count}"
+        return f"IP: {ip}   •   Puerto: {self.server.port}   •   Carpetas: {count}"
 
     # -------------------------------------------------------------------------
     # Gestión de Carpetas y Configuración
