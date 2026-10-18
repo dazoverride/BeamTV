@@ -9,6 +9,7 @@ import os
 import re
 import socket
 import struct
+import sys
 import threading
 import time
 import uuid
@@ -16,6 +17,12 @@ from email.utils import formatdate
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote
+
+
+def get_assets_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)) / "assets"
+    return Path(__file__).resolve().parent.parent / "assets"
 
 SSDP_ADDR = "239.255.255.250"
 SSDP_PORT = 1900
@@ -458,7 +465,7 @@ class DLNAServer:
             return
 
         if path == "/icon.png":
-            custom_icon = Path(__file__).resolve().parent.parent / "assets" / "icon.png"
+            custom_icon = get_assets_dir() / "icon.png"
             icon_bytes = custom_icon.read_bytes() if custom_icon.exists() else ICON_PNG_BYTES
             self._send_bytes(handler, 200, "image/png", icon_bytes, head_only)
             return

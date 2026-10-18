@@ -8,6 +8,7 @@ import datetime
 import json
 import os
 import queue
+import sys
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -18,10 +19,16 @@ try:
 except ImportError:
     from dlna_server import DLNAServer, get_local_ip
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-CONFIG_FILE = PROJECT_ROOT / "config.json"
-ICON_ICO = PROJECT_ROOT / "assets" / "icon.ico"
-ICON_PNG = PROJECT_ROOT / "assets" / "icon.png"
+if getattr(sys, "frozen", False):
+    APP_DIR = Path(sys.executable).resolve().parent
+    ASSETS_DIR = Path(getattr(sys, "_MEIPASS", APP_DIR)) / "assets"
+else:
+    APP_DIR = Path(__file__).resolve().parent.parent
+    ASSETS_DIR = APP_DIR / "assets"
+
+CONFIG_FILE = APP_DIR / "config.json"
+ICON_ICO = ASSETS_DIR / "icon.ico"
+ICON_PNG = ASSETS_DIR / "icon.png"
 
 
 def setup_windows_integration():
