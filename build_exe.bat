@@ -1,5 +1,7 @@
 @echo off
 cd /d "%~dp0"
+echo Cerrando instancias abiertas de BeamTV.exe (si las hay)...
+taskkill /f /im BeamTV.exe >nul 2>&1
 echo Compilando BeamTV.exe portable...
 if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" (
     set "PY=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
