@@ -136,10 +136,10 @@ class DLNADesktopApp:
 
         self.root.after(100, self._poll_logs)
 
-        if self.config.get("auto_start", True):
+        if self.config.get("auto_start", False):
             self.root.after(200, self.start_server)
         else:
-            self.append_log("[INFO] Listo. Pulsa 'Iniciar Servidor' para activar la transmisión.")
+            self.append_log("[INFO] Listo. Añade tus carpetas y pulsa 'Iniciar Servidor' para transmitir.")
 
     def _compute_ui_scale(self) -> float:
         """
@@ -198,7 +198,7 @@ class DLNADesktopApp:
             "friendly_name": "BeamTV",
             "folders": [],
             "port": 8200,
-            "auto_start": True,
+            "auto_start": False,
             "device_uuid": str(uuid.uuid4()),
         }
         if CONFIG_FILE.exists():
@@ -382,7 +382,7 @@ class DLNADesktopApp:
         cfg_frame.pack(side=tk.TOP, fill=tk.X, padx=pad_outer, pady=self.px(5))
 
         # Casilla a la derecha empaquetada primero para que nunca se corte
-        self.auto_start_var = tk.BooleanVar(value=self.config.get("auto_start", True))
+        self.auto_start_var = tk.BooleanVar(value=self.config.get("auto_start", False))
         auto_chk = tk.Checkbutton(
             cfg_frame,
             text="Iniciar automáticamente al abrir",
